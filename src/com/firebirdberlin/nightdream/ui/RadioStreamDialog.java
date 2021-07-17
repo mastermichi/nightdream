@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class RadioStreamDialog
@@ -48,7 +49,7 @@ public class RadioStreamDialog
 
     private EditText queryText = null;
     private ArrayList<RadioStation> stations = new ArrayList<>();
-    private ArrayList<String> stationTexts = new ArrayList<>();
+    private ArrayList<RadioStreamDialogItem> stationItem = new ArrayList<>();
     private ListView stationListView;
     private Spinner countrySpinner;
     private TextView noResultsText;
@@ -118,7 +119,7 @@ public class RadioStreamDialog
             }
         });
 
-        ArrayAdapter<String> stationListViewAdapter = new ArrayAdapter<>(context, android.R.layout.simple_list_item_1, stationTexts);
+        RadioStreamDialogCustomAdapter stationListViewAdapter = new RadioStreamDialogCustomAdapter(context, android.R.layout.simple_list_item_1, stationItem);
         stationListView.setAdapter(stationListViewAdapter);
         stationListView.setOnItemClickListener(new ListView.OnItemClickListener() {
             @Override
@@ -265,37 +266,17 @@ public class RadioStreamDialog
         for (Country c : countries) {
             countryNameToCodeMap.put(c.name, c.countryCode);
         }
-
     }
 
     private void updateDisplayedRadioStationTexts() {
-        boolean countrySelected = isCountrySelected();
-        stationTexts.clear();
+        stationItem.clear();
         for (RadioStation station : stations) {
-            String stationTitle;
-            if (countrySelected) {
-                stationTitle = getDisplayedRadioStationText(station, false);
-            } else {
-                stationTitle = getDisplayedRadioStationText(station, true);
-            }
-            stationTexts.add(stationTitle);
+            stationItem.add (new RadioStreamDialogItem(context, station.favIcon, station.countryCode, station.name, station.bitrate, station.isOnline, isCountrySelected()));
         }
-
     }
 
     private boolean isCountrySelected() {
         return (countrySpinner != null && countrySpinner.getSelectedItemPosition() > 0);
-    }
-
-    private String getDisplayedRadioStationText(RadioStation station, boolean displayCountryCode) {
-        String countryCode = (displayCountryCode) ? String.format("%s ", station.countryCode) : "";
-        String streamOffline =
-                (station.isOnline)
-                        ? ""
-                        : String.format(" - %s", context.getResources().getString(R.string.radio_stream_offline));
-        return String.format("%s%s (%d kbit/s)%s",
-                countryCode, station.name, station.bitrate, streamOffline
-        );
     }
 
     private void updateCountrySpinner(List<Country> countries, String preferredCountry) {
