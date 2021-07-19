@@ -52,8 +52,6 @@ public class RadioStreamDialogCustomAdapter extends ArrayAdapter<RadioStreamDial
         holder.txtDesc.setText(getDesc(item));
 
        if (item.getImageUrl() != null && !item.getImageUrl().isEmpty()) {
-
-
            holder.imageView.setImageUrl(item.getImageUrl(), mImageLoader);
         }
 

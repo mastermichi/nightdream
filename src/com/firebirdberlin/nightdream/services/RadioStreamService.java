@@ -7,14 +7,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.media.AudioAttributes;
 import android.media.AudioManager;
-import android.media.MediaPlayer;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.PowerManager;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -30,14 +26,16 @@ import com.firebirdberlin.nightdream.Utility;
 import com.firebirdberlin.nightdream.events.OnSleepTimeChanged;
 import com.firebirdberlin.nightdream.models.SimpleTime;
 import com.firebirdberlin.nightdream.repositories.VibrationHandler;
-import com.firebirdberlin.radiostreamapi.PlaylistParser;
 import com.firebirdberlin.radiostreamapi.PlaylistRequestTask;
 import com.firebirdberlin.radiostreamapi.RadioStreamMetadata;
 import com.firebirdberlin.radiostreamapi.RadioStreamMetadataRetriever;
 import com.firebirdberlin.radiostreamapi.RadioStreamMetadataRetriever.RadioStreamMetadataListener;
 import com.firebirdberlin.radiostreamapi.models.FavoriteRadioStations;
-import com.firebirdberlin.radiostreamapi.models.PlaylistInfo;
 import com.firebirdberlin.radiostreamapi.models.RadioStation;
+import com.google.android.exoplayer2.ExoPlaybackException;
+import com.google.android.exoplayer2.MediaItem;
+import com.google.android.exoplayer2.Player;
+import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaLoadRequestData;
 import com.google.android.gms.cast.MediaMetadata;
@@ -47,14 +45,7 @@ import com.google.android.gms.cast.framework.media.RemoteMediaClient;
 
 import org.greenrobot.eventbus.Subscribe;
 
-import java.io.IOException;
-
-public class RadioStreamService extends Service implements MediaPlayer.OnErrorListener,
-        MediaPlayer.OnBufferingUpdateListener,
-        MediaPlayer.OnCompletionListener,
-        MediaPlayer.OnPreparedListener,
-        HttpStatusCheckTask.AsyncResponse,
-        PlaylistRequestTask.AsyncResponse {
+public class RadioStreamService extends Service {
     static public boolean isRunning = false;
     static RadioStreamService mRadioStreamService = null;
     static public boolean alarmIsRunning = false;
@@ -76,7 +67,7 @@ public class RadioStreamService extends Service implements MediaPlayer.OnErrorLi
     long fadeInDelay = 50;
     int maxVolumePercent = 100;
     private long readyForPlaybackSince = 0L;
-    MediaPlayer mMediaPlayer = null;
+    SimpleExoPlayer exoPlayer = null;
     private Settings settings = null;
     private SimpleTime alarmTime = null;
     private float currentVolume = 0.f;
@@ -91,11 +82,11 @@ public class RadioStreamService extends Service implements MediaPlayer.OnErrorLi
         @Override
         public void run() {
             handler.removeCallbacks(fadeIn);
-            if (mMediaPlayer == null) return;
+            if (exoPlayer == null) return;
             currentVolume += 0.01;
             if (currentVolume <= maxVolumePercent / 100.) {
                 Log.i(TAG, "volume: " + currentVolume);
-                mMediaPlayer.setVolume(currentVolume, currentVolume);
+                exoPlayer.setVolume(currentVolume);
                 handler.postDelayed(fadeIn, fadeInDelay);
             }
         }
@@ -104,13 +95,13 @@ public class RadioStreamService extends Service implements MediaPlayer.OnErrorLi
         @Override
         public void run() {
             handler.removeCallbacks(fadeOut);
-            if (mMediaPlayer == null) return;
+            if (exoPlayer == null) return;
             if (RadioStreamService.streamingMode == StreamingMode.INACTIVE) {
                 stop(getApplicationContext());
             }
             currentVolume -= 0.01;
             if (currentVolume > 0.) {
-                mMediaPlayer.setVolume(currentVolume, currentVolume);
+                exoPlayer.setVolume(currentVolume);
                 handler.postDelayed(fadeOut, 50);
             } else {
                 stop(getApplicationContext());
@@ -323,6 +314,9 @@ public class RadioStreamService extends Service implements MediaPlayer.OnErrorLi
         } else {
             sleepTimeInMillis = 0L;
         }
+
+        playStream();
+
         return Service.START_REDELIVER_INTENT;
     }
 
@@ -348,13 +342,6 @@ public class RadioStreamService extends Service implements MediaPlayer.OnErrorLi
                     muteDelayInMillis = radioStation.muteDelayInMillis;
                 }
             }
-        }
-        if (PlaylistParser.isPlaylistUrl(streamURL)) {
-            resolveStreamUrlTask = new PlaylistRequestTask(this);
-            resolveStreamUrlTask.execute(streamURL);
-        } else {
-            statusCheckTask = new HttpStatusCheckTask(this);
-            statusCheckTask.execute(streamURL);
         }
     }
 
@@ -429,38 +416,6 @@ public class RadioStreamService extends Service implements MediaPlayer.OnErrorLi
         audioManager.setStreamVolume(currentStreamType, currentStreamVolume, 0);
     }
 
-    @Override
-    public void onPlaylistRequestFinished(PlaylistInfo result) {
-        if (result != null && result.valid) {
-            statusCheckTask = new HttpStatusCheckTask(this);
-            statusCheckTask.execute(result.streamUrl);
-            return;
-        }
-
-        if (alarmIsRunning) {
-            startFallbackAlarm();
-        }
-
-        Toast.makeText(this, getString(R.string.radio_stream_failure), Toast.LENGTH_SHORT).show();
-        stopSelf();
-    }
-
-    @Override
-    public void onStatusCheckFinished(HttpStatusCheckTask.HttpStatusCheckResult checkResult) {
-        if (checkResult != null && checkResult.isSuccess()) {
-            streamURL = checkResult.url;
-            playStream();
-            return;
-        }
-
-        if (alarmIsRunning) {
-            startFallbackAlarm();
-        }
-
-        Toast.makeText(this, getString(R.string.radio_stream_failure), Toast.LENGTH_SHORT).show();
-        stopSelf();
-    }
-
     void startFallbackAlarm() {
         AlarmService.startAlarm(this, alarmTime);
         alarmIsRunning = false;
@@ -470,43 +425,54 @@ public class RadioStreamService extends Service implements MediaPlayer.OnErrorLi
         Log.i(TAG, "playStream() " + streamURL);
 
         stopPlaying();
-        mMediaPlayer = new MediaPlayer();
-        mMediaPlayer.setOnCompletionListener(this);
-        mMediaPlayer.setOnErrorListener(this);
-        mMediaPlayer.setOnBufferingUpdateListener(this);
-        mMediaPlayer.setOnPreparedListener(this);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            int usage = (currentStreamType == AudioManager.STREAM_ALARM)
-                    ? AudioAttributes.USAGE_ALARM
-                    : AudioAttributes.USAGE_MEDIA;
-            mMediaPlayer.setAudioAttributes(
-                    new AudioAttributes.Builder()
-                            .setUsage(usage)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build()
-            );
-        } else {
-            mMediaPlayer.setAudioStreamType(currentStreamType);
-        }
-        mMediaPlayer.setWakeMode(this, PowerManager.PARTIAL_WAKE_LOCK);
 
-        try {
-            mMediaPlayer.setDataSource(streamURL);
-        } catch (IllegalStateException e) {
-            Log.e(TAG, "MediaPlayer.setDataSource() failed", e);
-        } catch (IOException e) {
-            Log.e(TAG, "MediaPlayer.setDataSource() failed", e);
-        } catch (IllegalArgumentException e) {
-            Log.e(TAG, "MediaPlayer.setDataSource() failed", e);
-        } catch (SecurityException e) {
-            Log.e(TAG, "MediaPlayer.setDataSource() failed", e);
-        }
+        exoPlayer = new SimpleExoPlayer.Builder(getApplicationContext()).build();
+        MediaItem mediaItem = MediaItem.fromUri(streamURL);
+        exoPlayer.setMediaItem(mediaItem);
+        exoPlayer.prepare();
 
-        try {
-            mMediaPlayer.prepareAsync();
-        } catch (IllegalStateException e) {
-            Log.e(TAG, "MediaPlayer.prepare() failed", e);
-        }
+        exoPlayer.addListener(new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(@Player.State int state) {
+                if (state == Player.STATE_READY) {
+                    Intent intent = new Intent(Config.ACTION_RADIO_STREAM_READY_FOR_PLAYBACK);
+                    intent.putExtra(EXTRA_RADIO_STATION_INDEX, radioStationIndex);
+                    LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
+
+                    handler.postDelayed(fadeIn, muteDelayInMillis);
+
+                    if (currentStreamType == AudioManager.STREAM_ALARM && alarmTime.vibrate && vibrator != null) {
+                        vibrator.startVibration();
+                    }
+                }
+            }
+            @Override
+            public void onPlayerError(ExoPlaybackException error) {
+                switch (error.type) {
+                    case ExoPlaybackException.TYPE_SOURCE:
+                        Log.e(TAG, "TYPE_SOURCE: " + error.getSourceException().getMessage());
+                        break;
+                    case ExoPlaybackException.TYPE_RENDERER:
+                        Log.e(TAG, "TYPE_RENDERER: " + error.getRendererException().getMessage());
+                        break;
+                    case ExoPlaybackException.TYPE_UNEXPECTED:
+                        Log.e(TAG, "TYPE_UNEXPECTED: " + error.getUnexpectedException().getMessage());
+                        break;
+                }
+                long now = System.currentTimeMillis();
+                if (alarmIsRunning && now - readyForPlaybackSince < 120000) {
+                    // if the stream stops during the first two minutes there are probably issues connecting
+                    // to the stream
+                    stopSelf();
+                    startFallbackAlarm();
+                    Toast.makeText(getApplicationContext(), getString(R.string.radio_stream_failure), Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+
+        Log.d(TAG, "exoPlayer.play()");
+        exoPlayer.setVolume(0);
+        exoPlayer.play();
 
         //todo
         Log.d(TAG, "start chromecast music");
@@ -566,70 +532,22 @@ public class RadioStreamService extends Service implements MediaPlayer.OnErrorLi
         }
     }
 
-    @Override
-    public boolean onError(MediaPlayer mp, int what, int extra) {
-        Log.e(TAG, "MediaPlayer.error: " + what + " " + extra);
-        long now = System.currentTimeMillis();
-        if (alarmIsRunning && now - readyForPlaybackSince < 120000) {
-            // if the stream stops during the first two minutes there are probably issues connecting
-            // to the stream
-            stopSelf();
-            startFallbackAlarm();
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    public void onBufferingUpdate(MediaPlayer mp, int percent) {
-        Log.e(TAG, "onBufferingUpdate " + percent);
-    }
-
-    @Override
-    public void onPrepared(MediaPlayer mp) {
-        currentVolume = 0.f;
-        if (mMediaPlayer != null) {
-            // mute mediaplayer volume immediately, before it starts playing
-            mMediaPlayer.setVolume(currentVolume, currentVolume);
-        }
-        handler.postDelayed(fadeIn, muteDelayInMillis);
-        try {
-            mp.start();
-            readyForPlayback = true;
-            readyForPlaybackSince = System.currentTimeMillis();
-            Intent intent = new Intent(Config.ACTION_RADIO_STREAM_READY_FOR_PLAYBACK);
-            intent.putExtra(EXTRA_RADIO_STATION_INDEX, radioStationIndex);
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
-        } catch (IllegalStateException e) {
-            Log.e(TAG, "MediaPlayer.start() failed", e);
-        }
-
-        if (currentStreamType == AudioManager.STREAM_ALARM && alarmTime.vibrate && vibrator != null) {
-            vibrator.startVibration();
-        }
-    }
-
-    @Override
-    public void onCompletion(MediaPlayer mp) {
-        Log.i(TAG, "onCompletion");
-        playStream();
-    }
-
     public void stopPlaying() {
-        if (mMediaPlayer != null) {
-            if (mMediaPlayer.isPlaying()) {
+        if ( exoPlayer!= null) {
+            if (exoPlayer.isPlaying()) {
                 Log.i(TAG, "stopPlaying()");
-                mMediaPlayer.stop();
+                exoPlayer.stop();
             }
-            mMediaPlayer.release();
-            mMediaPlayer = null;
+            exoPlayer.release();
+            exoPlayer = null;
         }
+
         if (vibrator != null) {
             vibrator.stopVibration();
         }
     }
 
-    /**
+    /*
      * add stop button for normal radio, and for alarm radio preview (stream started in
      * preferences dialog), but not for alarm
      */
