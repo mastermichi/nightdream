@@ -32,6 +32,9 @@ import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
 import androidx.lifecycle.LifecycleOwner;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentResultListener;
+import androidx.fragment.app.FragmentTransaction;
 import androidx.preference.CheckBoxPreference;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
@@ -44,7 +47,10 @@ import com.firebirdberlin.nightdream.receivers.PowerConnectionReceiver;
 import com.firebirdberlin.nightdream.receivers.WakeUpReceiver;
 import com.firebirdberlin.nightdream.services.ScreenWatcherService;
 import com.firebirdberlin.nightdream.ui.ClockLayoutPreviewPreference;
+import com.firebirdberlin.nightdream.ui.HueConnectPreference;
+import com.firebirdberlin.nightdream.ui.HueConnectPreferenceFragmentCompat;
 import com.firebirdberlin.nightdream.viewmodels.RSSViewModel;
+import com.firebirdberlin.nightdream.viewmodels.HueViewModel;
 import com.firebirdberlin.nightdream.widget.ClockWidgetProvider;
 import com.google.android.material.snackbar.Snackbar;
 import com.rarepebble.colorpicker.ColorPreference;
@@ -168,6 +174,9 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
                         case "activateDoNotDisturb":
                             setupNotificationAccessPermission(sharedPreferences, "activateDoNotDisturb");
                             break;
+                        case "switchHue":
+                            connectToHueBridge(sharedPreferences);
+                            break;
                         case "enableRSS":
                             if (settings.rssEnabled) {
                                 RSSViewModel.loadDataPeriodicFromWorker(mContext, (LifecycleOwner) mContext);
@@ -268,6 +277,37 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
     public void onCreate(Bundle savedInstanceState) {
         Log.d(TAG, "onCreate");
         super.onCreate(savedInstanceState);
+
+        getParentFragmentManager().setFragmentResultListener("hueKey", this, new FragmentResultListener() {
+            @Override
+            public void onFragmentResult(@NonNull String requestKey, @NonNull Bundle bundle) {
+                // We use a String here, but any type that can be put in a Bundle is supported
+                String hueKey = bundle.getString("hueKey");
+                Log.d(TAG, "ppt setFragmentResultListener: "+hueKey);
+
+                // Do something with the result
+
+                if (hueKey.contains("Error")) {
+                    handleHueError("connectHue", hueKey);
+                } else {
+                    Log.d(TAG, "ppt Key found");
+                    //Key found
+                    SharedPreferences prefs = getPreferenceManager().getSharedPreferences();
+
+                    if (HueViewModel.testHueConnection(prefs.getString("bridgeIP",""), hueKey)){
+                        Log.d(TAG, "ppt testHueConnection ok");
+                        SharedPreferences.Editor editor = prefs.edit();
+                        editor.putString("hueKey", hueKey);
+                        editor.apply();
+                    }
+                    else {
+                        Log.d(TAG, "ppt testHueConnection false");
+                        handleHueError("connectHue", "Can not connect to Hue Bridge");
+                    }
+                }
+
+            }
+        });
     }
 
     @Override
@@ -425,6 +465,9 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
                         }
                     }
                     break;
+                case "hue":
+                    setPreferencesFromResource(R.xml.preferences_hue, rootKey);
+                    break;
                 case "help":
                     setPreferencesFromResource(R.xml.preferences_help_feedback, rootKey);
                     break;
@@ -550,7 +593,8 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
                 hidePreference("showMediaStyleNotification");
             }
-
+        }else if ("hue".equals(rootKey)){
+            connectToHueBridge(prefs);
         } else if ("about".equals(rootKey)) {
 
             Preference recommendApp = findPreference("recommendApp");
@@ -816,6 +860,92 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
     private void setupDoNotDisturbPreference() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
             removePreference("activateDoNotDisturb");
+        }
+    }
+
+    private void connectToHueBridge(SharedPreferences prefs) {
+        Log.d(TAG, "ppt connectToHueBridge");
+        Preference switchHuePreference = findPreference("switchHue");
+
+        if (switchHuePreference != null) {
+            boolean on = prefs.getBoolean("switchHue", false);
+            Log.d(TAG, "ppt enable:" + on);
+
+            if (on) {
+                switchHuePreference.setSummary("suche nach Hue Bridge");
+                Log.d(TAG, "ppt prefs bridgeIP: " + prefs.getString("hueBridgeIP","No IP"));
+
+                if (prefs.getString("hueBridgeIP","").isEmpty()) {
+                    HueViewModel.observeIP(getContext(), getViewLifecycleOwner(), bridgeIP -> {
+                        Log.d(TAG, "ppt found IP: " + bridgeIP);
+
+                        SharedPreferences.Editor editor = prefs.edit();
+                        editor.putString("hueBridgeIP", bridgeIP);
+                        editor.apply();
+
+                        boolean showIp = prefs.getBoolean("switchHue", false);
+                        if (showIp && !bridgeIP.isEmpty()) {
+                            if (bridgeIP.contains("Error")) {
+                                handleHueError("switchHue", bridgeIP);
+                            } else {
+                                switchHuePreference.setSummary(bridgeIP);
+                                enablePreference("connectHue", true);
+                                Log.d(TAG, "ppt get Key");
+                                showHueDialog(prefs,"connectHue");
+                            }
+                        }
+                    });
+                } else {
+                    //bridge IP found in prefs
+                    switchHuePreference.setSummary(prefs.getString("bridgeIP",""));
+                    enablePreference("connectHue", true);
+                    if (!prefs.getString("hueKey","").isEmpty())
+                    {
+
+                    }
+                }
+            } else {
+                switchHuePreference.setSummary("");
+                enablePreference("connectHue", false);
+            }
+        }
+    }
+
+    private void showHueDialog(SharedPreferences prefs, String key) {
+        Log.d(TAG, "showHueDialog");
+        FragmentTransaction ft = getParentFragmentManager().beginTransaction();
+        Fragment prev = getParentFragmentManager().findFragmentByTag("HueDialog");
+        if (prev != null) {
+            ft.remove(prev);
+        }
+        ft.addToBackStack(null);
+        DialogFragment dialogFragment = HueConnectPreferenceFragmentCompat
+                .newInstance(key, prefs.getString("hueBridgeIP",""));
+
+        dialogFragment.setTargetFragment(this, 0);
+
+        dialogFragment.show(ft,"HueDialog");
+    }
+
+    private void handleHueError(String huePreferenceKey, String errorMessage){
+        Log.d(TAG, "ppt handleHueError");
+        Preference huePreference = findPreference(huePreferenceKey);
+        if (huePreference != null) {
+            String[] splitStr = errorMessage.split(":");
+            switch (splitStr[splitStr.length - 1].trim()) {
+                case "No Network connection":
+                    huePreference.setSummary(splitStr[splitStr.length - 1].trim());
+                    break;
+                case "Host unreachable":
+                    huePreference.setSummary(splitStr[splitStr.length - 1].trim());
+                    break;
+                case "link button not pressed":
+                    huePreference.setSummary(splitStr[splitStr.length - 1].trim());
+                    break;
+                default:
+                    huePreference.setSummary("Unknown Error");
+                    break;
+            }
         }
     }
 
@@ -1135,7 +1265,12 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
         if (preference instanceof ColorPreference) {
             ColorPreference cp = (ColorPreference) preference;
             cp.showDialog(this, 0);
-        } else super.onDisplayPreferenceDialog(preference);
+        }
+        else if(preference instanceof HueConnectPreference){
+            Log.d(TAG, "preference instanceof HueConnectPreference");
+            showHueDialog(getPreferenceManager().getSharedPreferences(), preference.getKey());
+        }
+        else super.onDisplayPreferenceDialog(preference);
     }
 
     private void setupDaydreamPreferences() {
