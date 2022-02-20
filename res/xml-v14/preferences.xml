@@ -64,6 +64,12 @@
         app:title="@string/notifications"/>
 
     <Preference
+        app:icon="@drawable/ic_hue_bridge"
+        app:key="hue"
+        app:fragment="com.firebirdberlin.nightdream.PreferencesFragment"
+        app:title="Hue"/>
+
+    <Preference
         app:icon="@drawable/ic_help"
         app:key="help"
         app:fragment="com.firebirdberlin.nightdream.PreferencesFragment"

@@ -168,6 +168,9 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
                         case "activateDoNotDisturb":
                             setupNotificationAccessPermission(sharedPreferences, "activateDoNotDisturb");
                             break;
+                        case "switchHue":
+                            connectToHueBridge(sharedPreferences);
+                            break;
                         case "enableRSS":
                             if (settings.rssEnabled) {
                                 RSSViewModel.loadDataPeriodicFromWorker(mContext, (LifecycleOwner) mContext);
@@ -425,6 +428,9 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
                         }
                     }
                     break;
+                case "hue":
+                    setPreferencesFromResource(R.xml.preferences_hue, rootKey);
+                    break;
                 case "help":
                     setPreferencesFromResource(R.xml.preferences_help_feedback, rootKey);
                     break;
@@ -550,7 +556,8 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
                 hidePreference("showMediaStyleNotification");
             }
-
+        }else if ("hue".equals(rootKey)){
+            connectToHueBridge(prefs);
         } else if ("about".equals(rootKey)) {
 
             Preference recommendApp = findPreference("recommendApp");
@@ -816,6 +823,19 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
     private void setupDoNotDisturbPreference() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
             removePreference("activateDoNotDisturb");
+        }
+    }
+
+    private void connectToHueBridge(SharedPreferences prefs) {
+        Preference switchHuePreference = findPreference("switchHue");
+        if (switchHuePreference != null) {
+            boolean on = prefs.getBoolean("switchHue", false);
+            Log.d(TAG, "ppt enable:" + on);
+            if (on) {
+                switchHuePreference.setSummary("suche nach Hue Bridge");
+            } else {
+                switchHuePreference.setSummary("");
+            }
         }
     }
 
