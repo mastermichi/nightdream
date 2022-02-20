@@ -42,9 +42,11 @@ import androidx.preference.SwitchPreferenceCompat;
 
 import com.firebirdberlin.nightdream.receivers.PowerConnectionReceiver;
 import com.firebirdberlin.nightdream.receivers.WakeUpReceiver;
+import com.firebirdberlin.nightdream.services.DownloadWeatherModel;
 import com.firebirdberlin.nightdream.services.ScreenWatcherService;
 import com.firebirdberlin.nightdream.ui.ClockLayoutPreviewPreference;
 import com.firebirdberlin.nightdream.viewmodels.RSSViewModel;
+import com.firebirdberlin.nightdream.viewmodels.HueViewModel;
 import com.firebirdberlin.nightdream.widget.ClockWidgetProvider;
 import com.google.android.material.snackbar.Snackbar;
 import com.rarepebble.colorpicker.ColorPreference;
@@ -833,6 +835,14 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             Log.d(TAG, "ppt enable:" + on);
             if (on) {
                 switchHuePreference.setSummary("suche nach Hue Bridge");
+
+                HueViewModel.observeIP(getContext(), String -> {
+                    Log.d(TAG, "ppt found IP: " + String);
+                    boolean showIp = prefs.getBoolean("switchHue", false);
+                    if (showIp) {
+                        switchHuePreference.setSummary(String);
+                    }
+                });
             } else {
                 switchHuePreference.setSummary("");
             }
