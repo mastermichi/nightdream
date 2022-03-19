@@ -8,9 +8,17 @@
 
     <SwitchPreferenceCompat
         app:iconSpaceReserved="false"
-        app:defaultValue="true"
+        app:defaultValue="false"
         app:key="switchHue"
         app:summary=""
         app:title="Hue Bridge" />
+
+    <com.firebirdberlin.nightdream.ui.HueConnectPreference
+        app:iconSpaceReserved="false"
+        app:enabled="false"
+        android:key="connectHue"
+        android:title="Connect to Hue"
+        android:summary="not connected"
+        />
 
 </PreferenceScreen>
