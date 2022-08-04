@@ -45,7 +45,6 @@ import androidx.preference.SwitchPreferenceCompat;
 
 import com.firebirdberlin.nightdream.receivers.PowerConnectionReceiver;
 import com.firebirdberlin.nightdream.receivers.WakeUpReceiver;
-import com.firebirdberlin.nightdream.services.DownloadWeatherModel;
 import com.firebirdberlin.nightdream.services.ScreenWatcherService;
 import com.firebirdberlin.nightdream.ui.ClockLayoutPreviewPreference;
 import com.firebirdberlin.nightdream.ui.HueConnectPreference;
@@ -59,8 +58,6 @@ import com.rarepebble.colorpicker.ColorPreference;
 import java.io.File;
 
 import de.firebirdberlin.preference.InlineSeekBarPreference;
-import io.github.zeroone3010.yahueapi.Hue;
-import io.github.zeroone3010.yahueapi.HueBridgeProtocol;
 
 public class PreferencesFragment extends PreferenceFragmentCompat {
     public static final String TAG = "PreferencesFragment";
@@ -293,9 +290,15 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
                 if (hueKey.contains("Error")) {
                     handleHueError("connectHue", hueKey);
                 } else {
+                    Log.d(TAG, "ppt Key found");
                     //Key found
-                    if (HueViewModel.testHueConnection("192.168.2.144", hueKey)){
+                    SharedPreferences prefs = getPreferenceManager().getSharedPreferences();
+
+                    if (HueViewModel.testHueConnection(prefs.getString("bridgeIP",""), hueKey)){
                         Log.d(TAG, "ppt testHueConnection ok");
+                        SharedPreferences.Editor editor = prefs.edit();
+                        editor.putString("hueKey", hueKey);
+                        editor.apply();
                     }
                     else {
                         Log.d(TAG, "ppt testHueConnection false");
@@ -870,14 +873,14 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
 
             if (on) {
                 switchHuePreference.setSummary("suche nach Hue Bridge");
-                Log.d(TAG, "ppt prefs bridgeIP:" + prefs.getString("bridgeIP","No IP"));
+                Log.d(TAG, "ppt prefs bridgeIP:" + prefs.getString("hueBridgeIP","No IP"));
 
-                if (prefs.getString("bridgeIP","").isEmpty()) {
+                if (prefs.getString("hueBridgeIP","").isEmpty()) {
                     HueViewModel.observeIP(getContext(), getViewLifecycleOwner(), bridgeIP -> {
                         Log.d(TAG, "ppt found IP: " + bridgeIP);
 
                         SharedPreferences.Editor editor = prefs.edit();
-                        editor.putString("bridgeIP", bridgeIP);
+                        editor.putString("hueBridgeIP", bridgeIP);
                         editor.apply();
 
                         boolean showIp = prefs.getBoolean("switchHue", false);
@@ -896,6 +899,10 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
                     //bridge IP found in prefs
                     switchHuePreference.setSummary(prefs.getString("bridgeIP",""));
                     enablePreference("connectHue", true);
+                    if (!prefs.getString("hueKey","").isEmpty())
+                    {
+
+                    }
                 }
             } else {
                 switchHuePreference.setSummary("");

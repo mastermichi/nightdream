@@ -27,8 +27,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.github.zeroone3010.yahueapi.Hue;
+import io.github.zeroone3010.yahueapi.HueBridgeProtocol;
 
 
 public class HueViewModel extends ViewModel {
@@ -106,6 +108,7 @@ public class HueViewModel extends ViewModel {
                         if (!finalKey.isEmpty()) {
                             hueKeyLiveData.postValue(finalKey);
                             Log.d(TAG, "ppt executor after: " + Hue.hueBridgeConnectionBuilder(bridgeIP).initializeApiConnection(appName).isDone());
+                            testHueConnection(bridgeIP, finalKey);
                         }
                         apiKey.cancel(true);
                         executor.shutdown();
@@ -162,16 +165,31 @@ public class HueViewModel extends ViewModel {
     }
 
     public static boolean testHueConnection(String bridgeIP, String apiKey) {
+        Log.d(TAG, "ppt testHueConnection ("+bridgeIP+","+apiKey+")");
+        final AtomicBoolean b = new AtomicBoolean(false);
         final Hue hue = new Hue(bridgeIP, apiKey);
-        try {
-            hue.refresh();
-            Log.d(TAG, "ppt testHueConnection true");
-            return true;
-        } catch (NetworkOnMainThreadException e) {
-            Log.d(TAG, "ppt testHueConnection false: " + e);
-            return false;
 
+        Thread thread = new Thread(() -> {
+            try  {
+                try {
+                    hue.getAllLights();
+                    b.set(true);
+                    Log.d(TAG, "ppt testHueConnection true");
+                } catch (NetworkOnMainThreadException e) {
+                    Log.d(TAG, "ppt testHueConnection false: " + e);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
+        thread.start();
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
+        return b.get();
     }
 
     private static class LiveDataUtil {
