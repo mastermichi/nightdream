@@ -873,7 +873,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
 
             if (on) {
                 switchHuePreference.setSummary("suche nach Hue Bridge");
-                Log.d(TAG, "ppt prefs bridgeIP:" + prefs.getString("hueBridgeIP","No IP"));
+                Log.d(TAG, "ppt prefs bridgeIP: " + prefs.getString("hueBridgeIP","No IP"));
 
                 if (prefs.getString("hueBridgeIP","").isEmpty()) {
                     HueViewModel.observeIP(getContext(), getViewLifecycleOwner(), bridgeIP -> {
@@ -920,7 +920,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
         }
         ft.addToBackStack(null);
         DialogFragment dialogFragment = HueConnectPreferenceFragmentCompat
-                .newInstance(key, prefs.getString("bridgeIP",""));
+                .newInstance(key, prefs.getString("hueBridgeIP",""));
 
         dialogFragment.setTargetFragment(this, 0);
 

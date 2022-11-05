@@ -1,4 +1,4 @@
-package com.firebirdberlin.nightdream.hueapi;
+package com.firebirdberlin.HueApi;
 
 import android.content.Context;
 import android.util.Log;
@@ -24,6 +24,7 @@ public class HueApiKey extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        Log.d(TAG, "ppt HueApiKey");
         final String bridgeIp = "192.168.2.144"; // Fill in the IP address of your Bridge
         final String appName = "nightdream"; // Fill in the name of your application
         final CompletableFuture<String> apiKey = Hue.hueBridgeConnectionBuilder(bridgeIp).initializeApiConnection(appName);

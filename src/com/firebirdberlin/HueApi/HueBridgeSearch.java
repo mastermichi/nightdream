@@ -1,10 +1,9 @@
-package com.firebirdberlin.nightdream.hueapi;
+package com.firebirdberlin.HueApi;
 
 import android.content.Context;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
-import androidx.lifecycle.MutableLiveData;
 import androidx.work.Data;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
@@ -13,7 +12,6 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import io.github.zeroone3010.yahueapi.HueBridge;
 import io.github.zeroone3010.yahueapi.discovery.HueBridgeDiscoveryService;
 
 public class HueBridgeSearch extends Worker {
@@ -26,7 +24,7 @@ public class HueBridgeSearch extends Worker {
     @NonNull
     @Override
     public Result doWork() {
-        Log.d(TAG, "ppt doWork()");
+        Log.d(TAG, "ppt HueBridgeSearch doWork()");
 
         Future<List<io.github.zeroone3010.yahueapi.HueBridge>> bridgesFuture = new HueBridgeDiscoveryService()
                 .discoverBridges(bridge -> Log.d(TAG, "ppt Bridge found: " + bridge));

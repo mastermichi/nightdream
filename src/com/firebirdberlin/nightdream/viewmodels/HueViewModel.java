@@ -21,7 +21,7 @@ import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
 
 import com.firebirdberlin.nightdream.Utility;
-import com.firebirdberlin.nightdream.hueapi.HueBridgeSearch;
+import com.firebirdberlin.HueApi.HueBridgeSearch;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -30,7 +30,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.github.zeroone3010.yahueapi.Hue;
-import io.github.zeroone3010.yahueapi.HueBridgeProtocol;
 
 
 public class HueViewModel extends ViewModel {
@@ -82,7 +81,7 @@ public class HueViewModel extends ViewModel {
     }
 
     private void findHueKey(Context context, String bridgeIP) {
-        Log.d(TAG, "ppt findHueKey");
+        Log.d(TAG, "ppt findHueKey + bridgeIP: "+bridgeIP);
 
         if (!Utility.hasNetworkConnection(context)) {
             Log.d(TAG, "ppt: !hasNetworkConnection");
