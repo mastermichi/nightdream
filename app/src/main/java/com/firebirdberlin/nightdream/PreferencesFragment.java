@@ -266,7 +266,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
                 // photo picker.
                 if (!uris.isEmpty()) {
                     Log.d("PhotoPicker", "Number of items selected: " + uris.size());
-                    File directory = new File(mContext.getFilesDir() + "/backgroundImages");
+                    File directory = new File(mContext.getFilesDir() + "/backgroundImages_temp");
                     Utility.prepareDirectory(directory);
 
                     PreferencesActivity activity = ((PreferencesActivity) mContext);
