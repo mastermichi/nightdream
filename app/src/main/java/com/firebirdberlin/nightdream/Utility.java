@@ -140,26 +140,48 @@ public class Utility {
         fileOrDirectory.delete();
     }
 
+    public static void writeFile(InputStream inputStream,OutputStream outputStream ) {
+        try {
+            byte[] buffer = new byte[1024];
+
+            int length;
+            while ((length = inputStream.read(buffer)) > 0) {
+                outputStream.write(buffer, 0, length);
+            }
+            outputStream.flush();
+            outputStream.close();
+            inputStream.close();
+        } catch (Exception ex){
+            Log.e("writeFile", ex.getMessage());
+            Log.e("writeFile", ex.toString());
+        }
+    }
+
     public static boolean copyToDirectory(Context context, Uri srcUri, File directory, String name) {
         try (InputStream inputStream = context.getContentResolver().openInputStream(srcUri)) {
             File file = new File(directory, name);
-            try (OutputStream outputStream = Files.newOutputStream(file.toPath())) {
-                byte[] buffer = new byte[1024];
-                int length;
-                while ((length = inputStream.read(buffer)) > 0) {
-                    outputStream.write(buffer, 0, length);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try (OutputStream outputStream = Files.newOutputStream(file.toPath())) {
+                    writeFile(inputStream,outputStream);
+                } catch (Exception ex) {
+                    Log.e("copyToDirectory", ex.getMessage());
+                    Log.e("copyToDirectory",ex.toString());
+                    return false;
                 }
-                outputStream.flush();
-                outputStream.close();
-                inputStream.close();
-            } catch (Exception ex) {
-                Log.e("copyToDirectory", ex.getMessage());
-                ex.printStackTrace();
-                return false;
+            }
+            else {
+                try (OutputStream outputStream = new FileOutputStream(file)) {
+                    writeFile(inputStream,outputStream);
+                } catch (Exception ex) {
+                    Log.e("copyToDirectory", ex.getMessage());
+                    Log.e("copyToDirectory",ex.toString());
+                    return false;
+                }
             }
         } catch (Exception ex) {
             Log.e("copyToDirectory", ex.getMessage());
-            ex.printStackTrace();
+            Log.e("copyToDirectory", ex.toString());
             return false;
         }
         return true;
